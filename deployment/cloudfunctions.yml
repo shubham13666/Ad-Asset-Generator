@@ -1,0 +1,63 @@
+# Google Cloud Functions/Cloud Run deployment configuration
+# This file provides configuration for deploying to Cloud Run
+# 
+# Usage:
+#   gcloud run deploy background-replacement \
+#     --source . \
+#     --platform managed \
+#     --region us-central1 \
+#     --allow-unauthenticated \
+#     --memory 2Gi \
+#     --timeout 540s \
+#     --set-env-vars INPAINT_PROVIDER=tencent,ENABLE_FALLBACK=true
+
+# Service configuration
+service: background-replacement
+region: us-central1
+platform: managed
+
+# Resource limits
+resources:
+  memory: 2Gi
+  cpu: 2
+  timeout: 540s
+
+# Environment variables (set via --set-env-vars or Secret Manager)
+env_vars:
+  - name: LOG_LEVEL
+    value: INFO
+  - name: USE_CLOUD_LOGGING
+    value: "true"
+  - name: FUNCTION_TIMEOUT
+    value: "540"
+
+# Secrets from Secret Manager
+secrets:
+  - name: GOOGLE_APPLICATION_CREDENTIALS
+    secret: google-service-account-key
+    version: latest
+  - name: TENCENT_SECRET_ID
+    secret: tencent-secret-id
+    version: latest
+  - name: TENCENT_SECRET_KEY
+    secret: tencent-secret-key
+    version: latest
+  - name: REMOVEBG_API_KEY
+    secret: removebg-api-key
+    version: latest
+
+# IAM permissions
+# Service account needs:
+# - roles/drive.file (Google Drive access)
+# - roles/spreadsheet.editor (Google Sheets access)
+# - roles/secretmanager.secretAccessor (Secret Manager access)
+
+# Cloud Scheduler trigger configuration
+# To set up scheduler:
+# gcloud scheduler jobs create http background-replacement-job \
+#   --schedule="*/5 * * * *" \
+#   --uri="https://background-replacement-xxxxx-uc.a.run.app" \
+#   --http-method=GET \
+#   --time-zone="America/New_York" \
+#   --oidc-service-account-email=service-account@project.iam.gserviceaccount.com
+

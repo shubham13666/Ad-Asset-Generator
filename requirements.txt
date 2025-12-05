@@ -1,0 +1,45 @@
+# Google Cloud Services
+google-api-python-client>=2.100.0
+google-auth>=2.23.0
+google-auth-httplib2>=0.1.1
+google-auth-oauthlib>=1.1.0
+google-cloud-logging>=3.8.0
+google-cloud-secret-manager>=2.16.0
+
+# Image Processing
+opencv-python>=4.8.0
+Pillow>=10.0.0
+numpy>=1.24.0
+
+# Mask Generation (Background Removal)
+rembg>=2.0.50              # Primary: FREE, local background removal
+onnxruntime>=1.16.3        # Required for Rembg performance
+
+# HTTP Requests
+requests>=2.31.0
+httplib2>=0.22.0
+
+# Tencent Cloud SDK
+tencentcloud-sdk-python>=3.0.0
+
+# OpenAI
+openai>=1.0.0
+requests>=2.31.0
+
+
+# Configuration
+python-dotenv>=1.0.0
+pydantic>=2.4.0
+
+# Utilities
+python-dateutil>=2.8.2
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-mock>=3.11.1
+
+# Deployment
+gunicorn>=21.2.0
+flask>=3.0.0
+
