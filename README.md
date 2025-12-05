@@ -1,4 +1,4 @@
-# Background Replacement System
+# Ad Asset Generator
 
 Production-ready automated background replacement system that monitors Google Drive folders, uses configurable AI providers for inpainting, and logs operations to Google Sheets.
 
