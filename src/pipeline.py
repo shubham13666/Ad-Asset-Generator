@@ -76,6 +76,14 @@ class BackgroundReplacementPipeline:
         
         # Initialize provider with fallback
         provider_config = self._build_provider_config()
+        
+        # Mark the primary provider in config
+        if self.config.primary_provider in provider_config:
+            provider_config[self.config.primary_provider]['is_primary_provider'] = True
+            # Also mark alias if exists
+            if self.config.primary_provider == 'google_gemini' and 'gemini' in provider_config:
+                provider_config['gemini']['is_primary_provider'] = True
+        
         self.inpainter = InpaintingProviderFactory.create_with_fallback(
             primary_provider_name=self.config.primary_provider,
             fallback_provider_names=self.config.fallback_providers if self.config.enable_fallback else [],
@@ -109,14 +117,39 @@ class BackgroundReplacementPipeline:
                 'retry_delay': self.config.alibaba.retry_delay
             }
         
-        # if self.config.stability:
-        #     config['stability'] = {
-        #         'api_key': self.config.stability.api_key,
-        #         'endpoint': self.config.stability.endpoint,
-        #         'timeout': self.config.stability.timeout,
-        #         'max_retries': self.config.stability.max_retries,
-        #         'retry_delay': self.config.stability.retry_delay
-        #     }
+        if self.config.stability:
+            config['stability'] = {
+                'api_key': self.config.stability.api_key,
+                'endpoint': self.config.stability.endpoint,
+                'timeout': self.config.stability.timeout,
+                'max_retries': self.config.stability.max_retries,
+                'retry_delay': self.config.stability.retry_delay
+            }
+        
+        if self.config.google_gemini:
+            config['google_gemini'] = {
+                'api_key': self.config.google_gemini.api_key,
+                'model': self.config.google_gemini.model,
+                'image_model': self.config.google_gemini.image_model,
+                'imagen_model': self.config.google_gemini.imagen_model,
+                'timeout': self.config.google_gemini.timeout,
+                'max_retries': self.config.google_gemini.max_retries,
+                'retry_delay': self.config.google_gemini.retry_delay,
+                'gcp_project_id': self.config.gcp_project_id,
+                'google_credentials_path': self.config.google_credentials_path
+            }
+            # Also add as 'gemini' alias
+            config['gemini'] = config['google_gemini'].copy()
+        
+        if self.config.freepik:
+            config['freepik'] = {
+                'api_key': self.config.freepik.api_key,
+                'base_url': self.config.freepik.base_url,
+                'max_search_results': self.config.freepik.max_search_results,
+                'timeout': self.config.freepik.timeout,
+                'max_retries': self.config.freepik.max_retries,
+                'retry_delay': self.config.freepik.retry_delay
+            }
         
         return config
     
@@ -431,6 +464,35 @@ class BackgroundReplacementPipeline:
             if not output_file:
                 raise Exception("Failed to upload output image")
             
+            # Save background image if enabled and available
+            if self.config.save_background_images:
+                background_image = inpaint_metadata.get("background_image")
+                if background_image:
+                    # Generate background filename
+                    base_name = Path(source_image_name).stem
+                    background_filename = f"{base_name}_background.jpg"
+                    
+                    # Save background image to bytes
+                    background_bytes = BytesIO()
+                    background_image.save(background_bytes, format='JPEG', quality=95)
+                    background_bytes.seek(0)
+                    
+                    # Upload background image to output folder
+                    logger.info(f"Uploading background image: {background_filename}")
+                    background_file = self.drive_client.upload_file(
+                        background_bytes.getvalue(),
+                        background_filename,
+                        work_item.output_folder_id,
+                        mime_type='image/jpeg'
+                    )
+                    
+                    if background_file:
+                        logger.info(f"✅ Background image saved: {background_filename}")
+                    else:
+                        logger.warning(f"Failed to upload background image: {background_filename}")
+                else:
+                    logger.debug("Background image not available in metadata")
+            
             processing_time = time.time() - processing_start
             
             # Log to Google Sheet
@@ -489,7 +551,18 @@ class BackgroundReplacementPipeline:
         processing_time: float
     ) -> None:
         """Log a failed processing attempt."""
-        metadata = get_image_metadata(local_image_path)
+        # Try to get image metadata by downloading the image
+        # If that fails, use default metadata
+        try:
+            image_bytes = self.drive_client.download_file(image_file['id'])
+            if image_bytes:
+                image = Image.open(BytesIO(image_bytes))
+                metadata = get_image_metadata(image)
+            else:
+                metadata = {'dimensions': 'unknown', 'width': 0, 'height': 0}
+        except Exception as e:
+            logger.warning(f"Could not get image metadata for logging: {e}")
+            metadata = {'dimensions': 'unknown', 'width': 0, 'height': 0}
         
         self.sheets_logger.log_processing_result(
             spreadsheet_id=work_item.spreadsheet_id,

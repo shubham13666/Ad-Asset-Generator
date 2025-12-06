@@ -37,6 +37,21 @@ class StabilityConfig(ProviderConfig):
     endpoint: str = "https://api.stability.ai/v2beta"
 
 
+class GoogleGeminiConfig(ProviderConfig):
+    """Google Gemini provider configuration."""
+    api_key: str
+    model: str = "gemini-2.5-flash"
+    image_model: str = "gemini-2.5-flash-image"  # For image generation API
+    imagen_model: str = "imagegeneration@006"  # For Vertex AI Imagen API
+
+
+class FreepikConfig(ProviderConfig):
+    """Freepik provider configuration."""
+    api_key: str
+    base_url: str = "https://api.freepik.com/v1"
+    max_search_results: int = 5
+
+
 class AppConfig(BaseModel):
     """Main application configuration."""
     
@@ -50,6 +65,8 @@ class AppConfig(BaseModel):
     alibaba: Optional[AlibabaConfig] = None
     stability: Optional[StabilityConfig] = None
     openai_chat: Optional[OpenAIConfig] = None
+    google_gemini: Optional[GoogleGeminiConfig] = None
+    freepik: Optional[FreepikConfig] = None
     # Google Cloud configuration
     gcp_project_id: Optional[str] = None
     google_credentials_path: Optional[str] = None
@@ -59,6 +76,9 @@ class AppConfig(BaseModel):
     
     # Mask generation configuration
     removebg_api_key: Optional[str] = None  # Optional fallback ($0.01/image)
+    
+    # Background image saving configuration
+    save_background_images: bool = Field(default=False)  # Save generated background images to output folder
     
     # Logging configuration
     log_level: str = Field(default="INFO")
@@ -73,7 +93,7 @@ class AppConfig(BaseModel):
     @classmethod
     def validate_primary_provider(cls, v: str) -> str:
         """Validate primary provider name."""
-        valid_providers = ["tencent", "alibaba", "stability","openai_chat"]
+        valid_providers = ["tencent", "alibaba", "stability", "openai_chat", "google_gemini", "gemini", "freepik"]
         if v.lower() not in valid_providers:
             raise ValueError(f"Primary provider must be one of {valid_providers}")
         return v.lower()
@@ -91,7 +111,7 @@ class AppConfig(BaseModel):
     @classmethod
     def validate_fallback_providers(cls, v: List[str]) -> List[str]:
         """Validate fallback provider names."""
-        valid_providers = ["tencent", "alibaba", "stability"]
+        valid_providers = ["tencent", "alibaba", "stability", "openai_chat", "google_gemini", "gemini", "freepik"]
         return [p.lower() for p in v if p.lower() in valid_providers]
 
 
@@ -153,6 +173,33 @@ def load_config_from_env() -> AppConfig:
             retry_delay=int(os.getenv("RETRY_DELAY_SECONDS", "2"))
         )
     
+    # Google Gemini configuration
+    google_gemini_config = None
+    if os.getenv("GOOGLE_GEMINI_API_KEY"):
+        google_gemini_config = GoogleGeminiConfig(
+            name="google_gemini",
+            api_key=os.getenv("GOOGLE_GEMINI_API_KEY"),
+            model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+            image_model=os.getenv("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image"),
+            imagen_model=os.getenv("IMAGEN_MODEL", "imagegeneration@006"),
+            timeout=int(os.getenv("INPAINT_TIMEOUT_SECONDS", "60")),
+            max_retries=int(os.getenv("MAX_RETRY_ATTEMPTS", "3")),
+            retry_delay=int(os.getenv("RETRY_DELAY_SECONDS", "2"))
+        )
+    
+    # Freepik configuration
+    freepik_config = None
+    if os.getenv("FREEPIK_API_KEY"):
+        freepik_config = FreepikConfig(
+            name="freepik",
+            api_key=os.getenv("FREEPIK_API_KEY"),
+            base_url=os.getenv("FREEPIK_BASE_URL", "https://api.freepik.com/v1"),
+            max_search_results=int(os.getenv("FREEPIK_MAX_RESULTS", "5")),
+            timeout=int(os.getenv("INPAINT_TIMEOUT_SECONDS", "60")),
+            max_retries=int(os.getenv("MAX_RETRY_ATTEMPTS", "3")),
+            retry_delay=int(os.getenv("RETRY_DELAY_SECONDS", "2"))
+        )
+    
     # Google Cloud configuration
     gcp_project_id = os.getenv("GCP_PROJECT_ID")
     google_credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
@@ -167,6 +214,9 @@ def load_config_from_env() -> AppConfig:
     log_level = os.getenv("LOG_LEVEL", "INFO")
     log_provider_details = os.getenv("LOG_PROVIDER_DETAILS", "true").lower() == "true"
     
+    # Background image saving configuration
+    save_background_images = os.getenv("SAVE_BACKGROUND_IMAGES", "false").lower() == "true"
+    
     # Cloud Run configuration
     function_timeout = int(os.getenv("FUNCTION_TIMEOUT", "540"))
     memory_limit = os.getenv("MEMORY_LIMIT", "2Gi")
@@ -179,7 +229,10 @@ def load_config_from_env() -> AppConfig:
         alibaba=alibaba_config,
         stability=stability_config,
         openai_chat=openai_chat_config,
+        google_gemini=google_gemini_config,
+        freepik=freepik_config,
         gcp_project_id=gcp_project_id,
+        save_background_images=save_background_images,
         google_credentials_path=google_credentials_path,
         google_sheets_credentials_path=google_sheets_credentials_path,
         google_drive_root_folder_id=google_drive_root_folder_id,
@@ -317,12 +370,15 @@ def validate_config(config: AppConfig) -> bool:
     errors = []
     
     # Validate primary provider has credentials
-    if config.primary_provider == "tencent" and not config.tencent:
-        errors.append("Tencent provider selected but credentials not configured")
-    elif config.primary_provider == "alibaba" and not config.alibaba:
+    
+    if config.primary_provider == "alibaba" and not config.alibaba:
         errors.append("Alibaba provider selected but credentials not configured")
     elif config.primary_provider == "stability" and not config.stability:
         errors.append("Stability AI provider selected but credentials not configured")
+    elif config.primary_provider in ("google_gemini", "gemini") and not config.google_gemini:
+        errors.append("Google Gemini provider selected but credentials not configured")
+    elif config.primary_provider == "freepik" and not config.freepik:
+        errors.append("Freepik provider selected but credentials not configured")
     
     # Validate Google Cloud credentials
     if not config.google_credentials_path and not os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):

@@ -30,6 +30,20 @@ try:
 except ImportError:
     STABILITY_AVAILABLE = False
 
+# Google Gemini provider
+try:
+    from providers.google_gemini import GoogleGeminiProvider
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+
+# Freepik provider
+try:
+    from providers.freepik import FreepikProvider
+    FREEPIK_AVAILABLE = True
+except ImportError:
+    FREEPIK_AVAILABLE = False
+
 
 class ProviderWithFallback:
     """
@@ -211,13 +225,19 @@ class InpaintingProviderFactory:
         'openai_chat': OpenAIChatProvider,
     }
 
-
     # Register optional providers if available
-    # if ALIBABA_AVAILABLE:
-    #     InpaintingProviderFactory._provider_registry['alibaba'] = AlibabaTongyiProvider
+    if ALIBABA_AVAILABLE:
+        _provider_registry['alibaba'] = AlibabaTongyiProvider
 
-    # if STABILITY_AVAILABLE:
-    #     InpaintingProviderFactory._provider_registry['stability'] = StabilityAIProvider
+    if STABILITY_AVAILABLE:
+        _provider_registry['stability'] = StabilityAIProvider
+    
+    if GEMINI_AVAILABLE:
+        _provider_registry['google_gemini'] = GoogleGeminiProvider
+        _provider_registry['gemini'] = GoogleGeminiProvider  # Alias
+    
+    if FREEPIK_AVAILABLE:
+        _provider_registry['freepik'] = FreepikProvider
         
     @classmethod
     def register_provider(cls, name: str, provider_class: type) -> None:
@@ -383,6 +403,15 @@ class InpaintingProviderFactory:
         elif provider_name == 'stability':
             provider_config.setdefault('api_key', config.get('stability_api_key'))
             provider_config.setdefault('endpoint', config.get('stability_endpoint'))
+        elif provider_name in ('google_gemini', 'gemini'):
+            provider_config.setdefault('api_key', config.get('google_gemini_api_key'))
+            provider_config.setdefault('model', config.get('gemini_model', 'gemini-2.5-flash'))
+            provider_config.setdefault('image_model', config.get('gemini_image_model', 'gemini-2.5-flash-image'))
+            provider_config.setdefault('imagen_model', config.get('imagen_model', 'imagegeneration@006'))
+        elif provider_name == 'freepik':
+            provider_config.setdefault('api_key', config.get('freepik_api_key'))
+            provider_config.setdefault('base_url', config.get('freepik_base_url', 'https://api.freepik.com/v1'))
+            provider_config.setdefault('max_search_results', config.get('freepik_max_results', 5))
         
         # Add common settings
         provider_config.setdefault('timeout', config.get('inpaint_timeout_seconds', 60))
